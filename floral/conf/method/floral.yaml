@@ -1,0 +1,36 @@
+---
+defaults:
+  - _method_with_router
+  - _self_
+
+lora_lr: ${lr}
+precond_eps: 1e-5  # or ${floral.training.precondlora_trainer.PRECOND_EPS}
+
+floral:
+  num_clusters: ${oc.select:dataset.num_clusters,4}
+  rank: 0.01
+  alpha: 1.0
+  num_clusters_mult: 1.0  # added for easy sweep configs
+  min_rank: 1
+  bias: True
+  use_linearlora: True
+  use_embeddinglora: False
+  use_convlora: True
+  use_normlora: False
+  convlora_method: balanced_2d  # can turn off convlora with 'none'
+                                # or use ${floral.floral.conv.DEFAULT_METHOD}
+  normlora_reparam: True
+  # below are still experimental
+  fuse_params: False
+  router_per_layer: False  # XXX: does not work with preconditioned lora
+  router_opts:
+    noise_std: 1.0
+    temp: 1.0
+    top2_gating: False
+
+trainer:
+  _target_: floral.training.PrecondLoRATrainer
+  precond_eps: ${precond_eps}
+
+strategy:
+  _target_: floral.server.strategy.FloralAvg

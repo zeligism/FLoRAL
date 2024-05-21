@@ -1,0 +1,7 @@
+---
+defaults:
+  - cifar10
+  - _self_
+
+dataset:
+  subtask: rotate

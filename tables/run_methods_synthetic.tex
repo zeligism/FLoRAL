@@ -1,0 +1,17 @@
+\begin{tabular}{llrr}
+\toprule
+ &  & Synthetic Linear & Synthetic MLP \\
+method & optimal_router &  &  \\
+\midrule
+\multirow[t]{2}{*}{Ensemble} & No & 0.0000 & 0.0024 \\
+ & Yes & 0.0000 & 0.0033 \\
+\cline{1-4}
+\multirow[t]{2}{*}{FLoRAL($\rho=1\%$)} & No & 0.0000 & 0.0039 \\
+ & Yes & 0.0000 & 0.0047 \\
+\cline{1-4}
+FedAvg & No & 10.5044 & 0.6124 \\
+\cline{1-4}
+Local Adaptor & No & 3.6073 & 0.0254 \\
+\cline{1-4}
+\bottomrule
+\end{tabular}

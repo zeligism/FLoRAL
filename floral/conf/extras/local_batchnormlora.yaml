@@ -1,0 +1,5 @@
+---
+extra_private_modules:
+  - layer_in.running_mean
+  - layer_in.running_var
+  - layer_in.num_batches_tracked

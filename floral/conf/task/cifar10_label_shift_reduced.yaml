@@ -1,0 +1,4 @@
+---
+defaults:
+  - cifar10_label_shift
+  - _reduced

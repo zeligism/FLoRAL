@@ -1,0 +1,8 @@
+---
+defaults:
+  - _optuna_base
+
+params:
+  method@_global_: choice(floral)
+  floral.use_normlora: choice(False, True)
+  floral.num_clusters: choice(4, 10)

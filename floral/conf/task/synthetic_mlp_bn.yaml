@@ -1,0 +1,18 @@
+---
+defaults:
+  - synthetic_mlp
+
+batch_size: 5
+
+dataset:
+  normalize_hidden: True
+
+model:
+  init_norm:
+    _target_: torch.nn.BatchNorm1d
+    _partial_: True
+
+hydra:
+  sweeper:
+    params:
+      seed: range(5)

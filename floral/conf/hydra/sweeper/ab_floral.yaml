@@ -1,0 +1,10 @@
+---
+defaults:
+  - _optuna_base
+
+params:
+  method@_global_: choice(floral)
+  floral.use_linearlora: choice(False,True)
+  floral.use_convlora: choice(False,True)
+  # floral.use_normlora: choice(False,True)
+  floral.bias: choice(False,True)

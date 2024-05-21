@@ -1,0 +1,7 @@
+---
+defaults:
+  - _submitit_base
+
+timeout_min: 1440
+cpus_per_task: 11
+mem_gb: 8

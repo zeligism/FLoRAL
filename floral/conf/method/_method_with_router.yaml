@@ -1,0 +1,30 @@
+---
+defaults:
+  - fedavg
+  - _self_
+
+router_lr: ${lr}
+router_entropy: 0.0
+router_diagonal_init: False
+
+regularizer:
+  _target_: floral.training.utils.Regularizer
+  regularizers:
+    router_entropy:
+      parameter: ${router_entropy}
+      function:
+        _target_: floral.training.utils.get_router_regularizer
+
+client:
+  _target_: floral.client.FlowerClientWithPrivateModules
+  private_dir: pvt
+  private_modules: [router]
+  full_comm: True
+
+strategy:
+  _target_: ???
+  global_model: ???  # filled at runtime
+  save_path: ???  # filled at runtime
+  global_lr: 1.0
+  eps: 1e-10
+  model_filename: model.pt

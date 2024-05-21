@@ -1,0 +1,35 @@
+---
+num_rounds: 3000
+batch_size: 4
+lr: 0.1
+router_lr: 0.1
+train_proportion: 0.8
+client_data_to_param_ratio: 0.25
+
+dataset:
+  _target_: floral.dataset.synthetic_datasets.synthetic.SyntheticDataset
+  linear: True
+  simple: False
+  data_dir: ${data_dir}
+  num_clients: 10
+  num_clusters: 2
+  seed: ${seed}
+  samples_per_client: ???  # filled at runtime using 'client_data_to_param_ratio'
+  dim: 10
+  dim_out: 3
+  uv_constant: 2.0
+  rank: 1
+  label_noise_std: 0.0
+
+loss_fn:
+  _target_: torch.nn.MSELoss
+
+model:
+  _target_: torch.nn.Linear
+  in_features: ${dataset.dim}
+  out_features: ${dataset.dim_out}
+
+# hydra:
+#   sweeper:
+#     params:
+#       seed: range(5)

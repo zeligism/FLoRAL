@@ -1,0 +1,8 @@
+---
+defaults:
+  - _optuna_base
+
+params:
+  method@_global_: choice(floral)
+  floral.rank: choice(0.01, 0.05)
+  floral.num_clusters_mult: choice(0.5, 1.0, 2.0)

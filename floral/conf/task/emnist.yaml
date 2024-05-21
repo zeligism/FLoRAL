@@ -1,0 +1,36 @@
+---
+num_rounds: 200  # about 90 min per 100 rounds of floral_rank4
+batch_size: 32
+lr: 0.1
+router_lr: 0.1
+
+dataloader:
+  num_workers: 2
+
+floral:
+  rank: 0.05
+  num_clusters: 10  # XXX
+  use_normlora: True
+
+dataset:
+  dataset: emnist
+  data_dir: ${data_dir}
+  statistics_dir: dataset_statistics
+  client_list: default  # any str that is not an actual filename would work
+  batch_size: ${batch_size}
+  test_batch_size: ${test_batch_size}
+  validation_mode: ${validation_mode}
+
+loss_fn:
+  _target_: torch.nn.CrossEntropyLoss
+
+model:
+  _target_: floral.model.EmnistResNetGN
+
+strategy:
+  fraction_fit: 0.02  # about 22 clients
+  fraction_evaluate: 0.02  # about 22 clients
+
+client_resources:
+  num_cpus: 1
+  num_gpus: 0

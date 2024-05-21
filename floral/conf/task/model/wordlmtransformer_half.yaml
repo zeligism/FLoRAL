@@ -1,0 +1,10 @@
+---
+defaults:
+  - wordlmtransformer_base
+  - _self_
+
+num_attn_heads: 6
+num_layers: 6
+input_dim: 384
+attn_hidden_dim: 64
+fc_hidden_dim: 1536

@@ -1,0 +1,6 @@
+---
+defaults:
+  - floral
+  - _self_
+
+router_diagonal_init: True

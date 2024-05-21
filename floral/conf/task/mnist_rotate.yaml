@@ -1,0 +1,7 @@
+---
+defaults:
+  - mnist
+  - _self_
+
+dataset:
+  subtask: rotate

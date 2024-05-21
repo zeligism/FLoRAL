@@ -1,0 +1,7 @@
+---
+defaults:
+  - _optuna_base
+
+params:
+  method@_global_: choice(floral)
+  floral.bias: choice(False, True)

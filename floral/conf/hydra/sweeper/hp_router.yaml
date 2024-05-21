@@ -1,0 +1,7 @@
+---
+defaults:
+  - _optuna_base
+
+params:
+  router_lr: choice(1.0, 0.3, 0.1, 0.03)
+  floral.router_temp: choice(3.0, 1.0, 0.3)

@@ -1,0 +1,14 @@
+---
+defaults:
+  - _method_with_router
+  - _self_
+
+ensemble:
+  num_clusters: ${oc.select:dataset.num_clusters,4}
+  router_opts:
+    noise_std: 1.0
+    temp: 1.0
+    top2_gating: False
+
+strategy:
+  _target_: floral.server.strategy.EnsembleAvg

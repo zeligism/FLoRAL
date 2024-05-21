@@ -1,0 +1,39 @@
+---
+num_rounds: 1000  # about 25 min per 100 rounds of floral_rank4 (double fraction below)
+batch_size: 32
+lr: 0.1
+router_lr: 0.1
+
+floral:
+  rank: 0.99999  # full fine-tuning of last layer
+  num_clusters: 10
+
+dataloader:
+  num_workers: 2
+
+dataset:
+  dataset: shakespeare
+  data_dir: ${data_dir}
+  statistics_dir: dataset_statistics
+  client_list: default
+  batch_size: ${batch_size}
+  test_batch_size: ${test_batch_size}
+  validation_mode: ${validation_mode}
+  local_epochs: ${local_epochs}
+
+loss_fn:
+  _target_: floral.dataset.tff_datasets.shakespeare.shakespeare_loss_of_batch_fn
+  _partial_: True
+
+model:
+  _target_: floral.model.SimpleRNN
+  vocab_size: 90
+
+strategy:
+  fraction_fit: 0.02  # about 14 clients
+  fraction_evaluate: 0.02  # about 13 clients
+
+client_resources:
+  num_cpus: 1
+  num_gpus: 0
+

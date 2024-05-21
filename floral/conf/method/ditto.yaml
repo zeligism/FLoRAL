@@ -1,0 +1,9 @@
+---
+defaults:
+  - fedavg
+  - _self_
+
+client:
+  _target_: floral.client.DittoClient
+  private_dir: pvt
+  prox_lambda: 1.0

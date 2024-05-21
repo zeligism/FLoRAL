@@ -1,0 +1,9 @@
+---
+defaults:
+  - fedavg
+  - _self_
+
+client:
+  _target_: floral.client.MomentumClient
+  private_dir: pvt
+  momentum: 0.9

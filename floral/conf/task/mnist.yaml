@@ -1,0 +1,41 @@
+---
+num_rounds: 500
+batch_size: 32
+lr: 0.1
+router_lr: 0.1
+
+dataloader:
+  num_workers: 2
+
+dataset:
+  dataset: mnist
+  subtask: none  # (rotate, label_shift)
+  num_clients: 300
+  num_clusters: 4
+  num_classes: 10
+  image_key: image
+  label_key: label
+  batch_size: ${batch_size}
+  test_batch_size: ${test_batch_size}
+  dataloader_cfg: ${dataloader}
+  val_proportion: ${val_proportion}
+  train_reduction: 0.0
+
+loss_fn:
+  _target_: torch.nn.CrossEntropyLoss
+
+model:
+  _target_: floral.model.MnistNN
+
+trainer:
+  batch_keys:
+    - ${dataset.image_key}
+    - ${dataset.label_key}
+
+client_resources:
+  num_cpus: 1
+  num_gpus: 0
+
+strategy:
+  fraction_fit: 0.1
+  fraction_evaluate: 0.1

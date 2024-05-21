@@ -1,0 +1,13 @@
+---
+defaults:
+  - ensemble
+  - _self_
+
+val_proportion: 0.2
+validation_mode: True
+
+loss_fn:
+  reduction: none  # this usually works, but should confirm for fancy losses
+
+trainer:
+  _target_: floral.training.EMTrainer

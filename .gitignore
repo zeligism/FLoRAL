@@ -1,0 +1,10 @@
+*.pyc
+.DS_Store
+logs/
+data/
+outputs*/
+notebooks/results*/
+plots*/
+*.tar.gz
+profile.svg
+.vscode/

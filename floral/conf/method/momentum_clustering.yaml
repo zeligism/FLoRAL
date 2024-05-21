@@ -1,0 +1,21 @@
+---
+defaults:
+  - fedavg
+  - _self_
+
+client:
+  _target_: floral.client.MomentumClient
+  private_dir: pvt
+  private_modules: [""]
+  full_comm: True
+
+strategy:
+  _target_: floral.server.strategy.MomentumClustering
+  global_model: ???  # filled at runtime
+  save_path: ???  # filled at runtime
+  global_lr: 1.0
+  private_dir: ${client.private_dir}
+  num_clusters: ${oc.select:dataset.num_clusters,4}
+  thresholding_quantile: 0.1
+  thresholding_rounds: 10
+  cluster_grads: True

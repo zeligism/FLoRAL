@@ -1,0 +1,12 @@
+\begin{tabular}{lllrrrrr}
+\toprule
+ & Method & Optimal Router & MNIST-Rotate & MNIST-Label-Shift & CIFAR-10-Rotate & CIFAR-10-Label-Shift & CIFAR-100 \\
+\midrule
+0 & Ensemble & No & 91.9 & 93.6 & 73.3 & 56.7 & 35.2 \\
+1 & Ensemble & Yes & 95.0 & 95.3 & 73.8 & 72.7 & 77.1 \\
+3 & FLoRAL($\rho=1\%$) & No & 91.7 & 93.2 & 70.2 & 74.1 & 51.7 \\
+4 & FLoRAL($\rho=1\%$) & Yes & 92.9 & 93.0 & 71.0 & 73.1 & 50.3 \\
+2 & FedAvg & No & 91.0 & 24.9 & 64.4 & 22.1 & 12.0 \\
+5 & Local Adaptor & No & 86.5 & 84.7 & 66.0 & 69.1 & 52.6 \\
+\bottomrule
+\end{tabular}

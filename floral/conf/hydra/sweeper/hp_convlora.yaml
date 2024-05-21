@@ -1,0 +1,8 @@
+---
+defaults:
+  - _optuna_base
+
+params:
+  method@_global_: choice(floral)
+  floral.use_convlora: choice(True)
+  floral.convlora_method: choice(none, in, out, balanced, balanced_2d)

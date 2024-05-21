@@ -1,0 +1,4 @@
+---
+defaults:
+  - cifar10_rotate
+  - _reduced

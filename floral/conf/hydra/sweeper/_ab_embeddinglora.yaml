@@ -1,0 +1,8 @@
+---
+defaults:
+  - _optuna_base
+
+params:
+  method@_global_: choice(floral)
+  floral.use_embeddinglora: choice(False)
+  floral.rank: choice(0.2)

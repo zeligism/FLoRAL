@@ -1,0 +1,6 @@
+---
+num_rounds: 1000
+router_lr: 0.3
+dataset:
+  train_reduction: 0.95
+  min_reduced_size: 10

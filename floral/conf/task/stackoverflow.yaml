@@ -1,0 +1,41 @@
+---
+defaults:
+  - model: wordlmtransformer_tiny
+
+num_rounds: 200  # about 65 min per 100 rounds of floral_rank4
+batch_size: 64
+lr: 0.1
+router_lr: 0.1
+
+dataloader:
+  num_workers: 2
+
+floral:
+  rank: 0.05
+  num_clusters: 10  # XXX
+  use_normlora: True
+
+dataset:
+  dataset: stackoverflow
+  data_dir: ${data_dir}
+  statistics_dir: dataset_statistics
+  client_list: default  # any str that is not an actual filename would work
+  batch_size: ${batch_size}
+  test_batch_size: ${test_batch_size}
+  validation_mode: ${validation_mode}
+  vocab_size: 10000
+  max_sequence_length: 20
+  num_oov_buckets: 1
+
+loss_fn:
+  _target_: floral.dataset.tff_datasets.stackoverflow.so_loss_of_batch_fn
+  _partial_: True
+
+strategy:
+  fraction_fit: 0.0005  # 0.05% of 116857 is about 58
+  fraction_evaluate: 0.05  # 5% of 1000 is 50
+
+client_resources:
+  num_cpus: 1
+  num_gpus: 0
+

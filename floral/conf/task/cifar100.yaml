@@ -1,0 +1,43 @@
+---
+num_rounds: 500  # about 45 min per 100 rounds of floral_rank4
+batch_size: 64
+lr: 0.03
+router_lr: 0.1  #${eval_num:'3 * ${lr}'}
+
+dataloader:
+  num_workers: 2
+
+floral:
+  rank: 0.05
+  num_clusters: 10
+
+dataset:
+  dataset: cifar100
+  subtask: none
+  num_clients: 100
+  num_clusters: 10
+  num_classes: 100
+  image_key: img
+  label_key: fine_label
+  batch_size: ${batch_size}
+  test_batch_size: ${test_batch_size}
+  dataloader_cfg: ${dataloader}
+  val_proportion: ${val_proportion}
+  train_reduction: 0.0
+
+loss_fn:
+  _target_: torch.nn.CrossEntropyLoss
+
+model:
+  _target_: floral.model.VGG8
+  batch_norm: False
+
+trainer:
+  batch_keys:
+    - ${dataset.image_key}
+    - ${dataset.label_key}
+
+client_resources:
+  num_cpus: 1
+  num_gpus: 0
+

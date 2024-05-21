@@ -1,0 +1,6 @@
+---
+defaults:
+  - fedavg
+  - _self_
+
+finetune_after: 0.8

@@ -1,0 +1,11 @@
+---
+defaults:
+  - floral
+  - _self_
+
+client:
+  _target_: floral.client.FlowerClientWithPrivateModules
+  private_modules: ["router", "lora_modules"]
+
+floral:
+  num_clusters: 1

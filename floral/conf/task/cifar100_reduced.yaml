@@ -1,0 +1,4 @@
+---
+defaults:
+  - cifar100
+  - _reduced

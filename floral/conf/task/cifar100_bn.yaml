@@ -1,0 +1,7 @@
+---
+defaults:
+  - cifar100
+  - _self_
+
+model:
+  batch_norm: True

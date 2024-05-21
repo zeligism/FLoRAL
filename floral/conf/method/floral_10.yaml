@@ -1,0 +1,7 @@
+---
+defaults:
+  - floral
+  - _self_
+
+floral:
+  rank: 0.1

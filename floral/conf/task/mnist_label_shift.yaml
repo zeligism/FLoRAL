@@ -1,0 +1,7 @@
+---
+defaults:
+  - mnist
+  - _self_
+
+dataset:
+  subtask: label_shift

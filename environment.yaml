@@ -1,0 +1,31 @@
+name: floral
+channels:
+  - defaults
+  - conda-forge
+  - pytorch
+  - nvidia
+dependencies:
+  - ipykernel
+  - jupyter
+  - matplotlib
+  - numpy
+  - pandas
+  - pip
+  - python<3.11
+  - pytorch-cuda=11.8
+  - seaborn=0.13.2
+  - torchinfo
+  - torchvision
+  - pip:
+    - flwr[simulation]
+    - flwr_datasets[vision]
+    - hydra-core
+    - hydra-optuna-sweeper
+    - hydra-submitit-launcher
+    - py-spy  # not required.. only for profiling clients (see scripts/test.py header)
+    # Comment out next 2 lines if running experiments without tff datasets
+    - tensorflow
+    - tensorflow-federated
+
+# Run the following if you want to get the right build of torchvision:
+# >> pip install --upgrade torchvision

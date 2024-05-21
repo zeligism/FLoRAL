@@ -1,0 +1,11 @@
+---
+defaults:
+  - floral
+  - _self_
+
+client:
+  _target_: floral.client.FlowerClientWithPersonalizedModules
+  split_update_budget: True
+
+floral:
+  rank: 1

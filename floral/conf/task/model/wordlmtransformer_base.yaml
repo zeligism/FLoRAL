@@ -1,0 +1,14 @@
+---
+_target_: floral.model.WordLMTransformer
+vocab_size: ${eval_num:'${dataset.vocab_size} + ${dataset.num_oov_buckets} + 3'}
+seq_len: ${dataset.max_sequence_length}
+tied_weights: True
+dropout_tr: ${oc.select:model_dropout,0.}
+dropout_io: ${oc.select:model_dropout,0.}
+
+num_attn_heads: 12
+num_layers: 12
+input_dim: 768
+attn_hidden_dim: 64
+fc_hidden_dim: 1536
+# max_grad_norm: 0.25
