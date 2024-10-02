@@ -2,7 +2,7 @@
 import torch
 from collections import defaultdict
 from math import ceil
-from typing import Callable, Iterable, Any
+from typing import Callable, Iterable, Optional, Any
 from flwr.common.logger import logger
 
 from floral.utils import init_device
@@ -23,8 +23,10 @@ class Trainer:
                  batch_keys: list[str] = DEFAULT_BATCH_KEYS,
                  custom_eval_fn: Callable[..., dict[str, float]] = lambda *_: {},
                  eval_only: bool = False,
+                 clip_grad_norm: Optional[float] = None,
                  ) -> None:
         self.device = init_device()
+        # self.device = torch.device("cpu")
         self.model = model.to(self.device)
         self.optimizer = optimizer
         self.dataloaders = dataloaders
@@ -34,7 +36,8 @@ class Trainer:
         self.local_epochs = local_epochs
         self.batch_keys = batch_keys
         self.custom_eval_fn = custom_eval_fn
-        self.eval_only = eval_only
+        self.eval_only = eval_only  # TODO
+        self.clip_grad_norm = clip_grad_norm
 
     def report_and_update(self,
                           metrics: dict[str, float],
@@ -59,7 +62,7 @@ class Trainer:
             raise NotImplementedError(batch)
         return data, target
 
-    def train(self) -> dict[str, float]:
+    def train(self, config: dict[str, Any]) -> dict[str, float]:
         self.model.train()
         metrics_meter = defaultdict(AverageMeter)
         for epoch in range(ceil(self.local_epochs)):
@@ -74,7 +77,7 @@ class Trainer:
         return {k: meter.get_avg() for k, meter in metrics_meter.items()}
 
     @torch.no_grad()
-    def evaluate(self) -> dict[str, float]:
+    def evaluate(self, config: dict[str, Any]) -> dict[str, float]:
         self.model.eval()
         metrics_meter = defaultdict(AverageMeter)
         for batch_idx, batch in enumerate(self.dataloaders['test']):
@@ -93,6 +96,8 @@ class Trainer:
         loss = self.loss_fn(output, target).mean()
         reg = self.regularizer(self.model).to(self.device)
         (loss + reg).backward()
+        if self.clip_grad_norm is not None:
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.clip_grad_norm)
         self.optimizer.step()
 
         return {"loss": loss.item(), **self.regularizer.as_dict()}

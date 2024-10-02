@@ -1,15 +1,13 @@
 ---
-num_rounds: 500  # about 45 min per 100 rounds of floral_rank4
+num_rounds: 500
 batch_size: 64
-lr: 0.03
-router_lr: 0.1  #${eval_num:'3 * ${lr}'}
+lr: 0.001
+router_lr: 0.1  #${eval_num:'3.0 * ${lr}'}
+# lora_lr: 0.003  #${eval_num:'0.1 * ${lr}'}
 
-dataloader:
-  num_workers: 2
-
-floral:
-  rank: 0.05
-  num_clusters: 10
+global_optimizer:
+  _target_: torch.optim.Adam
+  lr: 0.001
 
 dataset:
   dataset: cifar100
@@ -33,11 +31,11 @@ model:
   batch_norm: False
 
 trainer:
+  # clip_grad_norm: 100.0
   batch_keys:
     - ${dataset.image_key}
     - ${dataset.label_key}
 
-client_resources:
-  num_cpus: 1
-  num_gpus: 0
-
+strategy:
+  fraction_fit: 0.5
+  fraction_evaluate: 0.5

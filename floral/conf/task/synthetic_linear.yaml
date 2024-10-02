@@ -1,10 +1,13 @@
 ---
-num_rounds: 3000
+num_rounds: 2000
 batch_size: 4
 lr: 0.1
 router_lr: 0.1
 train_proportion: 0.8
 client_data_to_param_ratio: 0.25
+
+dataloader:
+  num_workers: 0
 
 dataset:
   _target_: floral.dataset.synthetic_datasets.synthetic.SyntheticDataset
@@ -29,7 +32,3 @@ model:
   in_features: ${dataset.dim}
   out_features: ${dataset.dim_out}
 
-# hydra:
-#   sweeper:
-#     params:
-#       seed: range(5)

@@ -15,7 +15,7 @@
 # 
 # Suggested Experiments:
 # - python scripts/run_experiment.py run_methods synthetic_linear synthetic_mlp mnist_rotate mnist_label_shift \
-#                                                   cifar10_rotate cifar10_label_shift cifar100 emnist shakespeare stackoverflow
+#                                        cifar10_rotate cifar10_label_shift cifar100 emnist shakespeare stackoverflow
 # - python scripts/run_experiment.py ab_floral cifar10_rotate cifar10_label_shift cifar100 emnist
 # - python scripts/run_experiment.py ab_normlora emnist stackoverflow
 # - python scripts/run_experiment.py hp_floral cifar10_rotate cifar10_label_shift cifar100 emnist shakespeare
@@ -27,12 +27,15 @@ import sys
 import os
 import glob
 import shutil
+# import psutil
 import subprocess
 import time
+
 
 EXPERIMENT_CONFIG_DIR = "floral/conf/hydra/sweeper"
 TASK_CONFIG_DIR = "floral/conf/task"
 LAUNCHER_CONFIG_DIR = "floral/conf/hydra/launcher"
+DEFAULT_LOCAL_LAUNCHER = "joblib"
 SWEEP_ID = "sweep"
 SUBTASK_SUFFIXES = (
     "_simple",
@@ -41,7 +44,14 @@ SUBTASK_SUFFIXES = (
     "_reduced",
     "_bn",
 )
-WAIT = False
+
+# Only if you have a lot of cpus locally, run 'FORCE_RUN_LOCALLY=1 python run_exper...'
+FORCE_RUN_LOCALLY = os.environ.get("FORCE_RUN_LOCALLY") is not None
+MAX_N_JOBS_LOCALLY = os.environ.get("MAX_N_JOBS_LOCALLY", 8)
+CPUS_PER_JOB_LOCALLY = os.environ.get("CPUS_PER_JOB_LOCALLY", 8)  # roughly speaking
+GPUS_PER_JOB_LOCALLY = os.environ.get("GPUS_PER_JOB_LOCALLY", 0)
+
+_printed = set()
 
 
 def get_config_names(conf_dir):
@@ -59,6 +69,13 @@ def remove_suffixes(task: str):
         for suffix in SUBTASK_SUFFIXES:
             task = task.removesuffix(suffix)
     return task
+
+
+def print_once(s):
+    global _printed
+    if s not in _printed:
+        print(s)
+        _printed.add(s)
 
 
 def parse_args():
@@ -82,11 +99,12 @@ def parse_args():
 
 
 if __name__ == "__main__":
-    ps = {}
     experiment, tasks = parse_args()
     slurm_detected = shutil.which("srun") is not None
-    if slurm_detected:
-        print("Slurm detected. Submitting jobs with submitit.")
+    print("Slurm detected." if slurm_detected else "Slurm not detected.")
+    should_use_slurm = slurm_detected and not FORCE_RUN_LOCALLY
+    print("Submitting slurm jobs with submitit." if should_use_slurm else "Ignoring slurm. Running locally.")
+
     print(f"Running experiment '{experiment}' on the following tasks: {tasks}")
     named_commands = {}
     for task in tasks:
@@ -96,36 +114,78 @@ if __name__ == "__main__":
             f"experiment={experiment}_{task}",
             f"task@_global_={task}",
             f"identifier={SWEEP_ID}",
+            "continue_training=True",
             # TODO: uncomment this when code is published
             # "loglevel=INFO",
-            # This helps construct a nice dirname for the sweeps
-            "hydra.job.config.override_dirname.exclude_keys=[experiment,identifier]",
         ]
+        exclude_keys = ["experiment", "identifier", "continue_training"]  # exclude them from sweep dir name
 
         # Use slurm launcher if slurm is detected
-        if slurm_detected:
+        found_submitit_launcher = False
+        if should_use_slurm:
             # A launcher for some task would be the same for all its subtasks
             launcher = f"submitit_{remove_suffixes(task)}"
             available_launchers = get_config_names(LAUNCHER_CONFIG_DIR)
             if launcher in available_launchers:
+                found_submitit_launcher = True
                 command += [f"hydra/launcher={launcher}"]
             else:
-                print(f"Couldn't find a submitit launcher config file '{launcher}' for task '{task}'.")
-                if "n" == input("Run locally without slurm? [y]/n: "):
-                    sys.exit("Terminating program.")
-        else:
-            print("Slurm not detected. Running locally.")
+                print(f"Couldn't find submitit launcher config '{launcher}' for task '{task}'.")
 
+        # Cannot submitit to slurm :(
+        if not found_submitit_launcher:
+            # Check capacity for running locally
+            total_cpus = os.cpu_count() or CPUS_PER_JOB_LOCALLY
+            n_jobs = min(MAX_N_JOBS_LOCALLY, max(1, total_cpus // CPUS_PER_JOB_LOCALLY))
+
+            if int(GPUS_PER_JOB_LOCALLY) > 0:
+                print_once("Running on gpu.")
+                command += ["hydra.sweeper.n_jobs=1"]
+                command += [f"+ray_init_args.num_cpus={CPUS_PER_JOB_LOCALLY}"]
+                command += [f"client_resources.num_cpus={int(CPUS_PER_JOB_LOCALLY) // int(GPUS_PER_JOB_LOCALLY)}"]
+                command += ["client_resources.num_gpus=1"]
+                exclude_keys.append("ray_init_args.num_cpus")
+                exclude_keys.append("client_resources.num_cpus")
+                exclude_keys.append("client_resources.num_gpus")
+            elif n_jobs == 1:
+                print_once("Capacity of local machine is not great. Running jobs sequentially (too slow).")
+                command += ["hydra.sweeper.n_jobs=1"]
+                command += ["dataloader.num_workers=0"]
+                exclude_keys.append("dataloader.num_workers")
+            else:
+                print_once("Capacity of local machine is ok.")
+                print_once(f"Will launch {n_jobs} jobs in parallel using {DEFAULT_LOCAL_LAUNCHER}.")
+                command += [f"hydra/launcher={DEFAULT_LOCAL_LAUNCHER}"]
+                command += [f"hydra.sweeper.n_jobs={n_jobs}"]
+                command += [f"+ray_init_args.num_cpus={CPUS_PER_JOB_LOCALLY}"]
+                exclude_keys.append("ray_init_args.num_cpus")
+
+        command += [f"hydra.job.config.override_dirname.exclude_keys=[{','.join(exclude_keys)}]"]
         named_commands[f"{experiment}_{task}"] = command
 
     # Run
+    ps = {}
+    exit_codes = {}
     for i, (command_name, command) in enumerate(named_commands.items()):
-        print(f"\n({i+1}) Running '{command_name}':", " ".join(command))
-        ps[task] = subprocess.Popen(command)
-        time.sleep(1)  # take it easy
+        print(f"[{i+1}/{len(named_commands)}] Running '{command_name}':", " ".join(command))
+        has_submitit_launcher = any("submitit" in arg for arg in command)
+        if has_submitit_launcher:
+            # Run in background since it's a light job submission process
+            ps[task] = subprocess.Popen(command)
+            time.sleep(1)  # take it easy
+        else:
+            # always run tasks sequentially (each task already includes a few jobs)
+            exit_codes[task] = subprocess.call(command)
 
-    if WAIT:
-        # wait for all sweep processes to finish (not necessary)
-        print("Waiting for processes to finish...")
-        exit_codes = {k: p.wait() for k, p in ps.items()}
-        print(f"Finished with exit codes: {exit_codes}")
+    # Wait, if any
+    try:
+        for k, p in ps.items():
+            if isinstance(p, subprocess.Popen):
+                print(f"Waiting for {k} to finish...")
+                exit_codes[k] = p.wait()
+    except:
+        for k, p in ps.items():
+            if isinstance(p, subprocess.Popen):
+                p.terminate()
+        raise
+    print(f"Finished all processes with exit codes: {exit_codes}")

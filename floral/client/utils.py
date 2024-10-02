@@ -1,4 +1,5 @@
 import os
+import shutil
 import glob
 import flwr as fl
 from pathlib import Path
@@ -34,14 +35,9 @@ def configure_actor_logger(logdir: Path, loglevel: str = "INFO", identifier: str
 
 def get_on_actor_init_fn(cfg):
     def on_actor_init_fn():
-        import warnings
-        warnings.filterwarnings("ignore", category=DeprecationWarning)
-        # need to resolve again for stackoverflow dataset
-        from omegaconf import OmegaConf
-        from floral.utils import eval_num
-        if not OmegaConf.has_resolver("eval_num"):
-            OmegaConf.register_new_resolver("eval_num", eval_num)
-    
+        from .. import _meta_init
+        _meta_init()
+
     return on_actor_init_fn
 
 
@@ -71,7 +67,7 @@ def get_client_fn(
         save_path: Path,
         client_mode = "train",  # TODO: remove
         local_client=False,  # TODO: remove
-        ) -> tuple[ClientFn, list[str], list[str]]:
+        ) -> tuple[ClientFn, dict[str, str]]:
     
     # NOTE: flwr simulation does not seem to support non-int client ids (is this a bug?)
     #       E.g., check `_wrap_recordset_in_message` in flwr/simulation/ray_transport/ray_client_proxy.py.
@@ -79,10 +75,18 @@ def get_client_fn(
     #       The order is unique for a FIXED pool of clients, so it might not be consistent across runs.
     try:
         # If cid is int, then just use it directly
-        clients_ids = {str(i): str(i) for i in map(int, client_data.keys())}
+        clients_ids = {str(int(cid)): cid for cid in client_data.keys()}
     except ValueError:
         # If we are here, then some cids are non-int, so use order instead as the cid for flwr simulation
         clients_ids = {str(i): cid for i, cid in enumerate(sorted(client_data.keys()))}
+
+    # Initialize private dir and clear it if starting a fresh training run
+    if "private_dir" in cfg.client:
+        private_dir = os.path.join(save_path, cfg.client.private_dir)
+        if not cfg.continue_training and os.path.exists(private_dir):
+            logger.debug(f"Removing stale private dir '{private_dir}'")
+            shutil.rmtree(private_dir)
+        os.makedirs(private_dir, exist_ok=True)
 
 
     def client_fn(int_cid: str) -> Client:

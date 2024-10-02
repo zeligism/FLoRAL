@@ -16,13 +16,18 @@ class LoRA(nn.Module):
     layer_in: LoRAableModule
     layer_out: LoRAableModule
 
+    @torch.no_grad()
     def reset(self):
         ...
 
-    def fuse(self):
+    @staticmethod
+    @torch.no_grad()
+    def merge(weight_in: torch.Tensor, weight_out: torch.Tensor) -> torch.Tensor:
         ...
 
-    def defuse(self):
+    @staticmethod
+    @torch.no_grad()
+    def demerge(merged_weight: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         ...
 
     def forward(self, *args, **kwargs):
@@ -30,22 +35,14 @@ class LoRA(nn.Module):
 
 
 class LoRAList(nn.ModuleList):
-    _modules: dict[str, LoRA]
+    _modules: dict[str, LoRA]  # just for type hinting, this is used internally in nn.ModuleList
 
     @torch.no_grad()
     def reset(self):
         [lora.reset() for lora in self]
 
-    @torch.no_grad()
-    def fuse(self):
-        return [lora.fuse() for lora in self]
-
-    @torch.no_grad()
-    def defuse(self):
-        return [lora.defuse() for lora in self]
-    
-    def forward(self, x: torch.Tensor, probs: Optional[torch.Tensor]):
+    def forward(self, x: torch.Tensor, probs: torch.Tensor, min_prob: float = 0.01):
         probs = probs.view(-1)
         assert len(probs) == len(self)
-        lora_outputs = torch.stack([lora(x) for lora in self])
-        return torch.einsum("c,c...->...", probs, lora_outputs)
+        probs = probs.clamp(min=min_prob)
+        return torch.stack([p * lora(x) for p, lora in zip(probs, self)]).sum(0)

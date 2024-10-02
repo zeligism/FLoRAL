@@ -1,4 +1,4 @@
-from omegaconf import OmegaConf
+from omegaconf import DictConfig
 from .synthetic_datasets import get_synthetic_data
 from .flwr_datasets import get_flwr_data
 from .tff_datasets import get_tff_data
@@ -13,7 +13,7 @@ def startswithany(name: str, prefixes: tuple[str]) -> bool:
     return any(name.startswith(prefix) for prefix in prefixes)
 
 
-def get_data(cfg: OmegaConf):
+def get_data(cfg: DictConfig):
     if startswithany(cfg.task, SYNTHETIC_TASKS):
         return get_synthetic_data(cfg)
     elif startswithany(cfg.task, FLWR_TASKS):

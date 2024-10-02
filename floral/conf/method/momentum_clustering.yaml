@@ -11,8 +11,6 @@ client:
 
 strategy:
   _target_: floral.server.strategy.MomentumClustering
-  global_model: ???  # filled at runtime
-  save_path: ???  # filled at runtime
   global_lr: 1.0
   private_dir: ${client.private_dir}
   num_clusters: ${oc.select:dataset.num_clusters,4}

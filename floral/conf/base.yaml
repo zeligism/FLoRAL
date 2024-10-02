@@ -15,10 +15,10 @@ defaults:
 
 # Use '/scratch/$USER' as IO dir if detected as $SCRATCH, otherwise use current dir
 scratch_dir: ${oc.env:SCRATCH,.}
-data_dir: ${scratch_dir}/data
+data_dir: ${oc.env:DATA_DIR,${scratch_dir}}/data
 # Putting output_dir in /scratch introduces some weird behavior in sweeps due to
 # cluster config (in our cluster, each partition has its own /scratch.)
-output_dir: ./outputs  # ${scratch_dir}/outputs
+output_dir: ${oc.env:OUTPUT_DIR,.}/outputs
 # If False, sweeps will terminate if a history file with the same name already exists
 overwrite_sweep: False
 # If True, all sweep run files except history will be cleared after completion of run
@@ -39,21 +39,23 @@ hydra:
   sweeper:
     params: ???  # should be filled by task/sweeper package
 
-# These should be filled at runtime, do not change
+# These should be filled at runtime (do not change)
 task: ???
 method: ???
 extras: ???
 logdir: ???
+
+# Logger confid args
 max_logfiles: 3
 loglevel: DEBUG
 
 # helper args
 show_cfg: False
 wandb: False
-is_rnn: False  # TODO(refactor): define RNN trainer instead
 
 # Task-specific args (most should be overridden by task and method packages)
 num_rounds: 10
+round_timeout: null
 local_epochs: 1
 deterministic: True
 seed: 0
@@ -63,6 +65,7 @@ batch_size: 32
 test_batch_size: 512
 lr: 0.1
 weight_decay: 0.0
+continue_training: False
 
 # Data split args
 train_proportion: 0.8  # for synthetic datasets
@@ -86,6 +89,10 @@ optimizer:
   lr: ${lr}
   weight_decay: ${weight_decay}
 
+global_optimizer:
+  _target_: torch.optim.SGD
+  lr: 1.0
+
 # Loss functions should be declared in the config
 loss_fn:
   _target_: torch.nn.MSELoss
@@ -107,7 +114,7 @@ trainer:
 client:
   _target_: floral.client.FlowerClient
 
-# Default Flower Strategy with weight average metrics aggregation
+# Default Flower Strategy with weighted average metrics aggregation
 strategy:
   _target_: floral.server.strategy.FedAvgBase
   fraction_fit: 1.0
@@ -116,20 +123,29 @@ strategy:
     _target_: floral.server.strategy.get_metrics_aggregation_fn
   fit_metrics_aggregation_fn:
     _target_: floral.server.strategy.get_metrics_aggregation_fn
-
-# Simulation configs
-server_config:
-  _target_: flwr.server.ServerConfig
-  num_rounds: ${num_rounds}
+  # Opts for our version of FedAvg, which should be filled at runtime
+  global_model: ???
+  global_optimizer: ???
+  save_path: ???
+  continue_training: ${continue_training}
 
 # It is important to choose these carefully depending on your system's resources and memory
 client_resources:
-  num_cpus: 1.0
-  num_gpus: 0.0
+  num_cpus: 1
+  num_gpus: 0
+  # XXX
+  # num_cpus: 4
+  # num_gpus: 1
+  # XXX
 
 ray_init_args:
   # Don't connect to an existing ray cluster, create a new one instead
+  # If you connect to an existing Ray cluster, then flower will create as many actors as can fit (given resources).
+  # This is fine as long as the Ray cluster was created ONLY for this run. Otherwise, it will be messy,
+  # and Ray will need to manage clients from different runs simulatneously with more actors than necessary.
   address: local
   # Below are the default `ray_init_args` from Flower source code
   ignore_reinit_error: True
   include_dashboard: False
+
+keep_ray_initialized: False

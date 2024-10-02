@@ -55,7 +55,7 @@ class FlowerClient(fl.client.NumPyClient):
         init_seed([round, cid_val])
         start_time = now()
         self.set_parameters(parameters)
-        train_metrics = self.trainer.train()
+        train_metrics = self.trainer.train(config)
         metrics = {
             "round": round,
             "duration": now() - start_time,
@@ -83,7 +83,7 @@ class FlowerClient(fl.client.NumPyClient):
 
         start_time = now()
         self.set_parameters(parameters)
-        eval_metrics = self.trainer.evaluate()
+        eval_metrics = self.trainer.evaluate(config)
         metrics = {
             "duration": now() - start_time,
             **eval_metrics,

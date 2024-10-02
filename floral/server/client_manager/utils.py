@@ -1,5 +1,6 @@
 from .client_manager import ClientManagerBase
 
+
 def get_client_manager(cfg, fit_clients=None, evaluate_clients=None):
     client_manager_args = {
         "fit_clients": fit_clients,

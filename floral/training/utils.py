@@ -1,7 +1,8 @@
 import torch
+import torch.nn as nn
 from hydra.utils import instantiate
-from omegaconf import OmegaConf
-from typing import Callable
+from omegaconf import OmegaConf, DictConfig
+from typing import Callable, Optional
 from flwr.common.logger import logger
 from .trainer_base import TrainerBase
 from floral.dataset.synthetic_datasets import eval_synthetic_metrics
@@ -69,8 +70,8 @@ class Regularizer:
 
 
 # TODO(refactor): put in main?
-def instantiate_model(cfg, client_id=None):
-    if "ensemble" in cfg:
+def instantiate_model(cfg: DictConfig, client_id: Optional[str] = None) -> nn.Module:
+    if cfg.method.startswith("ensemble"):
         model = Ensemble(lambda: instantiate(cfg.model), **cfg.ensemble)
     else:
         model = instantiate(cfg.model)
@@ -95,7 +96,7 @@ def instantiate_model(cfg, client_id=None):
 
 # Diagonal init of router (the optimal assignment of the synthetic dataset)
 @torch.no_grad()
-def router_diagonal_init_(model, client_id):
+def router_diagonal_init_(model, client_id: str):
     try:
         int(client_id)
         client_id_is_int = True
@@ -111,9 +112,9 @@ def router_diagonal_init_(model, client_id):
     else:
         cluster_id = int(client_id) % len(model.router.weight)
         with torch.no_grad():
-            # After softmax, 1 at cluster_id and 0 everywhere else
+            # After softmax, ~1 at cluster_id and ~0 everywhere else
             model.router.weight -= 100.
-            model.router.weight[cluster_id] = 0.0
+            model.router.weight[cluster_id] = 0.
 
 
 def get_param_groups(cfg, model):
@@ -135,7 +136,7 @@ def get_param_groups(cfg, model):
                 "weight_decay": 0.0,  # don't decay router
             },
         ]
-    elif "ensemble" in cfg:
+    elif cfg.method.startswith("ensemble"):
         return [
             {
                 "params": model.models.parameters(),

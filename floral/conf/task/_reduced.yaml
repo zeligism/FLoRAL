@@ -1,5 +1,5 @@
 ---
-num_rounds: 1000
+num_rounds: 1500
 router_lr: 0.3
 dataset:
   train_reduction: 0.95

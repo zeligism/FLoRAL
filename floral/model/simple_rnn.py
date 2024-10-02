@@ -7,68 +7,70 @@ import torch.nn as nn
 
 
 # # https://github.com/pytorch/pytorch/blob/main/benchmarks/fastrnns/custom_lstms.py
-# class LSTMCell(nn.Module):
-#     def __init__(self, input_size, hidden_size):
-#         super().__init__()
-#         self.input_size = input_size
-#         self.hidden_size = hidden_size
-#         self.ih_layer = nn.Linear(input_size, 4 * hidden_size)
-#         self.hh_layer = nn.Linear(hidden_size, 4 * hidden_size)
+class LSTMCell(nn.Module):
+    def __init__(self, input_size, hidden_size):
+        super().__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.ih_layer = nn.Linear(input_size, 4 * hidden_size)
+        self.hh_layer = nn.Linear(hidden_size, 4 * hidden_size)
 
-#     def forward(
-#         self, input: torch.Tensor, state: tuple[torch.Tensor, torch.Tensor]
-#     ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
-#         hx, cx = state
-#         gates = self.ih_layer(input) + self.hh_layer(hx)
-#         ingate, forgetgate, cellgate, outgate = gates.chunk(4, 1)
+    def forward(
+        self, input: torch.Tensor, state: tuple[torch.Tensor, torch.Tensor]
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+        hx, cx = state
+        gates = self.ih_layer(input) + self.hh_layer(hx)
+        ingate, forgetgate, cellgate, outgate = gates.chunk(4, 1)
 
-#         ingate = torch.sigmoid(ingate)
-#         forgetgate = torch.sigmoid(forgetgate)
-#         cellgate = torch.tanh(cellgate)
-#         outgate = torch.sigmoid(outgate)
+        ingate = torch.sigmoid(ingate)
+        forgetgate = torch.sigmoid(forgetgate)
+        cellgate = torch.tanh(cellgate)
+        outgate = torch.sigmoid(outgate)
 
-#         cy = (forgetgate * cx) + (ingate * cellgate)
-#         hy = outgate * torch.tanh(cy)
+        cy = (forgetgate * cx) + (ingate * cellgate)
+        hy = outgate * torch.tanh(cy)
 
-#         return hy, (hy, cy)
-
-
-# class LSTMLayer(nn.Module):
-#     def __init__(self, *cell_args):
-#         super().__init__()
-#         self.cell = LSTMCell(*cell_args)
-
-#     def forward(
-#         self, input: torch.Tensor, state: tuple[torch.Tensor, torch.Tensor]
-#     ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
-#         inputs = input.unbind(0)
-#         outputs = []
-#         for i in range(len(inputs)):
-#             out, state = self.cell(inputs[i], state)
-#             outputs += [out]
-#         return torch.stack(outputs), state
+        return hy, (hy, cy)
 
 
-# class LSTM(nn.Module):
-#     def __init__(self, input_size=8, hidden_size=512, num_layers=2):
-#         super().__init__()
-#         self.layers = nn.ModuleList([LSTMLayer(input_size, hidden_size)] + [
-#             LSTMLayer(hidden_size, hidden_size) for _ in range(num_layers-1)
-#         ])
+class LSTMLayer(nn.Module):
+    def __init__(self, *cell_args):
+        super().__init__()
+        self.cell = LSTMCell(*cell_args)
 
-#     def forward(
-#         self, input: torch.Tensor, states: list[tuple[torch.Tensor, torch.Tensor]]
-#     ) -> tuple[torch.Tensor, list[tuple[torch.Tensor, torch.Tensor]]]:
-#         # List[LSTMState]: One state per layer
-#         output_states = []
-#         output = input
-#         i = 0
-#         for rnn_layer in self.layers:
-#             state = states[i]
-#             output, out_state = rnn_layer(output, state)
-#             output_states += [out_state]
-#             i += 1
-#         return output, output_states
+    def forward(
+        self, input: torch.Tensor, state: tuple[torch.Tensor, torch.Tensor]
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+        inputs = input.unbind(0)
+        outputs = []
+        for i in range(len(inputs)):
+            out, state = self.cell(inputs[i], state)
+            outputs += [out]
+        return torch.stack(outputs), state
+
+
+class LSTM(nn.Module):
+    def __init__(self, input_size=8, hidden_size=512, batch_first=False, num_layers=2):
+        super().__init__()
+        self.batch_first = batch_first
+        self.layers = nn.ModuleList([LSTMLayer(input_size, hidden_size)] + [
+            LSTMLayer(hidden_size, hidden_size) for _ in range(num_layers-1)
+        ])
+
+    def forward(
+        self, input: torch.Tensor, states: list[tuple[torch.Tensor, torch.Tensor]]
+    ) -> tuple[torch.Tensor, list[tuple[torch.Tensor, torch.Tensor]]]:
+        # List[LSTMState]: One state per layer
+        output = input
+        output_states = []
+        if self.batch_first:
+            output = output.transpose(0,1)
+        for layer, state in zip(self.layers, states):
+            output, output_state = layer(output, state)
+            output_states.append(output_state)
+        if self.batch_first:
+            output = output.transpose(0,1)
+        return output, output_states
 
 
 class SimpleRNN(nn.Module):
@@ -84,16 +86,12 @@ class SimpleRNN(nn.Module):
         # embedding and LSTM layers
         self.embedding = nn.Embedding(vocab_size, embedding_dim)
         self.num_lstm_layers = num_layers
-        self.lstm = nn.LSTM(
+        # self.lstm = nn.LSTM(
+        self.lstm = LSTM(
             input_size=embedding_dim,
             hidden_size=hidden_dim,
             batch_first=True,
             num_layers=num_layers)
-
-        # self.lstm = LSTM(
-        #     input_size=embedding_dim,
-        #     hidden_size=hidden_dim,
-        #     num_layers=num_layers)
 
         # linear and sigmoid layers
         self.fc = nn.Linear(hidden_dim, vocab_size)

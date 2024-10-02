@@ -17,10 +17,14 @@ mpl.rcParams['ps.fonttype'] = 42
 mpl.rcParams['figure.figsize'] = (5, 3)  # use for publication
 # mpl.rcParams['figure.figsize'] = (9, 6)
 LEGEND_SIZE = 9
+LEGEND_NCOL = 3
 
-OUTPUT_DIR = 'outputs'
-PLOTS_DIR = "plots"
+BASE_DIR = os.environ.get("OUTPUT_DIR", ".")
+OUTPUT_DIR = os.path.join(BASE_DIR, 'outputs')
+PLOTS_DIR = os.path.join(BASE_DIR, "plots")
 FILE_PATTERN = "*/*/*.pkl"  # <experiment>/<task_dir>/history.pkl
+DEFAULT_DOWNSAMPLE_LEN = 50  # rounds
+DEFAULT_TIME_PERIOD = 60  # seconds
 
 MODES = ["centralized", "distributed", "distributed_fit"]
 INDICES = ["round", "time"]
@@ -31,6 +35,29 @@ METRICS = [
     "accuracy_top5", "accuracy_top10",
     "router_entropy", "W_error", "uv_error",
 ]
+
+VARIABLE_TO_LATEX = {
+    "method": "Method",
+    "optimal_router": r"Optimal $\pi$",
+}
+VARIABLE_FIELDS_TO_LATEX = {
+    "method": {
+        "ensemble": "Ensemble",
+        "fedavg": "FedAvg",
+        "floral": "FLoRAL(1%)",
+        "floral_optimalrouter": "FLoRAL(1%)",
+        "floral_10": "FLoRAL(10%)",
+        "floral_10_optimalrouter": "FLoRAL(10%)",
+        "locallora": "Local Adaptor",
+        "fedprox": "FedProx",
+        "ditto": "Ditto",
+    },
+    "optimal_router": {
+        False: False,
+        True: True,
+    },
+}
+
 AVAILABLE_EXPERIMENTS = [
     # ----- Methods ------ #
     # Clustered datasets
@@ -75,29 +102,48 @@ AVAILABLE_EXPERIMENTS = [
     # Batchnorm methods
     "hp_batchnormlora_synthetic_mlp_bn",
     "hp_batchnormlora_cifar100_bn",
+    # Router regularization
+    "hp_regularizer_cifar10_rotate",
+    "hp_regularizer_cifar10_label_shift",
 ]
 
 
 def load_runs(output_dir=OUTPUT_DIR):
-    histories = []
+    histories = {}
     for run in glob.glob(os.path.join(output_dir, FILE_PATTERN)):
         try:
             with open(run, "rb") as f:
                 history = pickle.load(f)
         except:
             continue
-        histories.append(history)
+        histories[run] = history
     return histories
 
 
 def flwr_history_to_df(history):
-    history_dict = {
-        "loss_centralized": history.losses_centralized,
-        "loss_distributed": history.losses_distributed,
-        **{k+"_centralized": v for k, v in history.metrics_centralized.items() if k != "round"},
-        **{k+"_distributed": v for k, v in history.metrics_distributed.items() if k != "round"},
-        **{k+"_distributed_fit": v for k, v in history.metrics_distributed_fit.items() if k != "round"},
-    }
+    if isinstance(history, dict):
+        try:
+            # Version 2
+            history_dict = {
+                "loss_centralized": history["losses_centralized"],
+                "loss_distributed": history["losses_distributed"],
+                **{k+"_centralized": v for k, v in history["metrics_centralized"].items() if k != "round"},
+                **{k+"_distributed": v for k, v in history["metrics_distributed"].items() if k != "round"},
+                **{k+"_distributed_fit": v for k, v in history["metrics_distributed_fit"].items() if k != "round"},
+            }
+        except KeyError:
+            # Version 3 (TODO: deprecate versions 1 and 2)
+            history_dict = history
+    else:
+        # Version 1
+        history_dict = {
+            "loss_centralized": history.losses_centralized,
+            "loss_distributed": history.losses_distributed,
+            **{k+"_centralized": v for k, v in history.metrics_centralized.items() if k != "round"},
+            **{k+"_distributed": v for k, v in history.metrics_distributed.items() if k != "round"},
+            **{k+"_distributed_fit": v for k, v in history.metrics_distributed_fit.items() if k != "round"},
+        }
+
     # history_dict = {"Loss": history.losses_distributed}
     # for metric_name, metric_history in history.metrics_distributed.items():
     #     if metric_name == "round":
@@ -116,7 +162,7 @@ def flwr_history_to_df(history):
         pd.DataFrame(history_dict[k], columns=["round", k]).set_index("round")
         for k in history_dict.keys() if len(history_dict[k]) > 0
     ]
-    assert len(history_df_list) > 0, f"History is empty! Something is wrong with this run..."
+    assert len(history_df_list) > 0
     history_df = pd.concat(history_df_list, axis="columns").reset_index()
     # add 'time' from 'duration
     for mode in ["centralized", "distributed", "distributed_fit"]:
@@ -128,22 +174,41 @@ def flwr_history_to_df(history):
     return history_df
 
 
-def histories_to_df(histories, filter_values=None, ignore_values=None, downsampled_len=50, hide_na=True):
+def histories_to_df(
+        histories,
+        filter_values=None,
+        ignore_values=None,
+        downsample_index=INDICES[0],
+        downsample_len=DEFAULT_DOWNSAMPLE_LEN,
+        hide_na=True,
+        ):
     if len(histories) == 0:
         print("Histories list is empty!")
         return pd.DataFrame()
 
     df_list = []
-    for history in histories:
+    for run, history in histories.items():
         cfg = history["cfg"]
         if not cfg_satisfies(cfg, filter_values, should_intersect=True):
             continue
         if not cfg_satisfies(cfg, ignore_values, should_intersect=False):
             continue
-        df = pd.DataFrame(data=flwr_history_to_df(history["history"]))
+        try:
+            df = pd.DataFrame(data=flwr_history_to_df(history["history"]))
+        except AssertionError:
+            print(f"Encountered a problem with run '{run}'")
+            continue
+        if len(df) == 0:
+            print(f"Run '{run}' is empty!")
+            continue
+        if len(df) == 1:
+            print(f"Run '{run}' consists of a single round!")
+            continue
         if hide_na and len(df["loss_distributed"]) > 0 and pd.isna(df["loss_distributed"].iloc[-1]):
-                continue
-        df = downsample_to_len(df, downsampled_len)
+            print(f"Run '{run}' final loss is NaN!")
+            continue
+        # This downsampling assumes a df of metrics for one run only
+        df = downsample_to_len(df, downsample_len, index=downsample_index)
         df = add_cfg_to_df(cfg, df)
         df_list.append(df)
 
@@ -195,24 +260,29 @@ def cfg_satisfies(source, target, should_intersect=True, root="/", verbose=False
     return True
 
 
-def downsample_to_len(df, downsampled_len):
-    # TODO: for time, average per second, then downsample
+def downsample_to_len(
+        df,
+        downsample_len=DEFAULT_DOWNSAMPLE_LEN,
+        index="round",
+        time_period=DEFAULT_TIME_PERIOD,
+        ):
     numeric_cols = df.select_dtypes(include="number").columns.tolist()
     other_cols = df.select_dtypes(exclude="number").columns.tolist()
-    period = (df["round"].max() - df["round"].min()) / downsampled_len
-
-    def round_to_period(x):
-        # TODO: backfill int time
-        return round(period * round(round(x) / period + 0.4999999))  # 0 stays 0
+    period = (df[index].max() - df[index].min()) / downsample_len
 
     # Creating an index of downsampled rounds with mean values (dropping the older round col)
-    downsampled_df = df.groupby(df["round"].apply(round_to_period))[numeric_cols].mean().drop(columns=["round"])
-    downsampled_df[downsampled_df < 1e-20] = 0.0  # values less than 1e-20 are effectively 0 (numeric cols only)
-    # Reset non-numeric columns
+    downsampled_df = df.groupby(df[index].apply(lambda i: round(period * round(i / period))))
+    # Take the mean of the numeric columns
+    downsampled_df = downsampled_df[numeric_cols].mean().drop(columns=[index])
+    # Values less than 1e-20 are effectively 0 (numeric cols only)
+    downsampled_df[downsampled_df < 1e-20] = 0.0
+    # Re-assign non-numeric columns
     if len(other_cols) > 0:
-        downsampled_df[other_cols] = df.set_index("round")[other_cols]
-    # Moved downsampled round from index to col
-    downsampled_df = downsampled_df.reset_index(names="round")
+        downsampled_df[other_cols] = df.set_index(index)[other_cols]
+    # Make index into column
+    downsampled_df = downsampled_df.reset_index()
+    for time_index in filter(lambda c: "time" in c, downsampled_df.columns):
+        downsampled_df[time_index] = time_period * round(downsampled_df[time_index] / time_period)
 
     return downsampled_df
 
@@ -231,6 +301,7 @@ def add_cfg_to_df(cfg, df):
         df[name] = reg.parameter
     if cfg.method.startswith("floral"):
         df["router_lr"] = cfg.router_lr
+        df["router_entropy"] = cfg.router_entropy
         df["optimal_router"] = cfg.router_diagonal_init
         df["rank"] = cfg.floral.rank
         df["alpha"] = cfg.floral.alpha
@@ -259,25 +330,30 @@ def add_cfg_to_df(cfg, df):
 def setup_experiment_plotting_and_variables(history_df, experiment):
     assert experiment in AVAILABLE_EXPERIMENTS
     if "run_methods" in experiment:
-        # XXX: Rename methods
-        # floral_locallora -> locallora
+        # XXX: floral_locallora -> locallora
         history_df.loc[history_df["method"] == "floral_locallora", "method"] = "locallora"
         # Declare methods, remove if not found
-        methods_sorted = ["fedavg", "floral", "floral_10", "locallora", "ensemble"]
+        methods_sorted = ["fedavg", "locallora", "ensemble", "floral", "floral_10"]
+        # methods_sorted += ["fedprox", "ditto"]  # XXX
         available_methods = history_df["method"].unique()
         for method in methods_sorted:
-            if method not in available_methods:
+            if method not in available_methods and f"{method}_optimalrouter" not in available_methods:
                 methods_sorted.remove(method)
         # remove _optimalrouter suffix (use option instead)
         for method in methods_sorted:
-            if method in methods_sorted:
-                history_df.loc[history_df["method"] == f"{method}_optimalrouter", "method"] = method
+            history_df.loc[history_df["method"] == f"{method}_optimalrouter", "method"] = method
         # plotting options and variables
-        plot_opts = {"hue": "method", "hue_order": methods_sorted}
         variables = ["method"]
         if len(history_df["optimal_router"].unique()) > 1:
-            plot_opts["style"] = "optimal_router"
-            variables += ["optimal_router"]
+                variables += ["optimal_router"]
+        for variable in variables:
+            history_df[variable] = history_df[variable].map(VARIABLE_FIELDS_TO_LATEX[variable])
+        history_df = history_df.rename(columns={k: v for k, v in VARIABLE_TO_LATEX.items() if k in variables})
+        plot_opts = {"hue": VARIABLE_TO_LATEX["method"],
+                     "hue_order": [VARIABLE_FIELDS_TO_LATEX["method"][method] for method in methods_sorted]}
+        if "optimal_router" in variables:
+            plot_opts["style"] = VARIABLE_TO_LATEX["optimal_router"]
+        variables = [VARIABLE_TO_LATEX[v] for v in variables]
 
     elif "hp_batchnormlora" in experiment:
         # XXX: remove local_batchnorlora and rename others
@@ -317,7 +393,7 @@ def setup_experiment_plotting_and_variables(history_df, experiment):
             "style_order": [False, True],
         }
 
-    elif "hp_floral":
+    elif "hp_floral" in experiment:
         variables = ["num_clusters", "rank"]
         plot_opts = {
             "hue": "num_clusters",
@@ -327,6 +403,14 @@ def setup_experiment_plotting_and_variables(history_df, experiment):
             "style_order": list(sorted(history_df["rank"].unique())),
         }
 
+    elif "hp_regularizer" in experiment:
+        variables = ["router_entropy"]
+        plot_opts = {
+            "hue": "router_entropy",
+            "hue_order": list(sorted(history_df["router_entropy"].unique())),
+            "palette": "tab10",
+        }
+
     else:
         variables = []
         plot_opts = {"hue": "identifier"}
@@ -334,9 +418,9 @@ def setup_experiment_plotting_and_variables(history_df, experiment):
     return history_df, plot_opts, variables
 
 
-def plot_and_save(history_df, plot_opts, results_dir, close_figure=False):
-    plotting_df = history_df.copy()
+def plot_and_save(history_df, plot_opts, results_dir, use_median_and_ci=False, close_figure=False):
     for index, metric, mode in product(INDICES, METRICS, MODES):
+        plotting_df = history_df.copy()
         x = index if index == "round" else f"{index}_{mode}"
         y = f"{metric}_{mode}"
         if x not in plotting_df.columns or y not in plotting_df.columns:
@@ -344,11 +428,20 @@ def plot_and_save(history_df, plot_opts, results_dir, close_figure=False):
         plotting_df = plotting_df.dropna(subset=x)
         if len(plotting_df) == 0 or plotting_df[y].sum() == 0.0:
             continue
+
         fig, ax = plt.subplots(1)
-        sns.lineplot(x=x, y=y, data=plotting_df, ax=ax, errorbar="sd", **plot_opts)
-        ax.legend(prop={'size': LEGEND_SIZE})
         if "acc" not in y:
             ax.set_yscale('log')
+        if use_median_and_ci:
+            # Reporting the median and CI for experiment runs is better than reporting the mean and std.
+            # Unfortunately, it is much slower, so only use this when generating the final plots
+            sns.lineplot(x=x, y=y, data=plotting_df, ax=ax, estimator="median", errorbar="ci", **plot_opts)
+        else:
+            sns.lineplot(x=x, y=y, data=plotting_df, ax=ax, estimator="mean", errorbar="sd", **plot_opts)
+        # Configure legend
+        box = ax.get_position()
+        ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+        ax.legend(prop={"size": LEGEND_SIZE}, loc='center left', bbox_to_anchor=(1, 0.5))
         fig.tight_layout()
         plt.savefig(os.path.join(results_dir, f"{y}_given_{x}.pdf"))
         if close_figure:
@@ -367,7 +460,8 @@ def variables_metrics_to_csv(history_df, variables, results_dir, metrics=METRICS
         for metric in metrics:
             # XXX: should be checked case by case, but usually a minimize objective has 'loss' in it
             minimize = "loss" in metric
-            ranked_last_metric_df = last_values_df[[*variables, metric, "total_time"]].sort_values(metric, ascending=minimize)
+            ranked_last_metric_df = last_values_df[
+                [*variables, metric, "total_time"]].sort_values(metric, ascending=minimize)
             ranked_last_metric_df.to_csv(os.path.join(results_dir, f"{metric}.csv"))
             last_values_df_list.append(ranked_last_metric_df)
         return last_values_df_list

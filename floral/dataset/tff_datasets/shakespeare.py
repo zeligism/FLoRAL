@@ -15,7 +15,7 @@
 # limitations under the License.
 """Libraries to prepare Shakespeare datasets for CharRNN experiments."""
 
-from typing import Callable, Tuple
+from typing import Callable, Tuple, Optional
 import os
 import math
 import torch
@@ -52,6 +52,7 @@ class ShakespeareFederatedDataloader(FederatedDataloader):
         self.client_sizes = {k: int(v) for (k, v) in self.client_sizes.items()}  # convert client size to int
 
         train_dataset, test_dataset = get_federated_datasets(
+            cache_dir=data_dir,
             train_client_batch_size=batch_size,
             test_client_batch_size=EVAL_BATCH_SIZE,
             train_client_epochs_per_round=local_epochs,
@@ -62,8 +63,8 @@ class ShakespeareFederatedDataloader(FederatedDataloader):
         else:  # test
             self.tf_fed_dataset = test_dataset
 
-        # Use the keys from the statistics file as some test clients were removed
-        # manually because they bizzarely have 0 length data.
+        # XXX: Use the keys from the statistics file as some test clients were removed
+        #      manually because they bizzarely have 0 length data.
         self.available_clients_set = set(self.client_sizes.keys())
 
     def get_client_dataloader(self, client_id):
@@ -267,6 +268,7 @@ def create_preprocess_fn(
 
 
 def get_federated_datasets(
+    cache_dir: Optional[str] = None,
     train_client_batch_size: int = 4,
     test_client_batch_size: int = 100,
     train_client_epochs_per_round: int = 1,
@@ -313,7 +315,7 @@ def get_federated_datasets(
         test_shuffle_buffer_size = 1
 
     shakespeare_train, shakespeare_test = (
-        tff.simulation.datasets.shakespeare.load_data())
+        tff.simulation.datasets.shakespeare.load_data(cache_dir=cache_dir))
 
     train_preprocess_fn = create_preprocess_fn(
         num_epochs=train_client_epochs_per_round,
@@ -333,6 +335,7 @@ def get_federated_datasets(
 
 
 def get_centralized_datasets(
+    cache_dir: Optional[str] = None,
     train_batch_size: int = 20,
     test_batch_size: int = 100,
     train_shuffle_buffer_size: int = 1000,
@@ -363,7 +366,7 @@ def get_centralized_datasets(
         test_shuffle_buffer_size = 1
 
     shakespeare_train, shakespeare_test = (
-        tff.simulation.datasets.shakespeare.load_data())
+        tff.simulation.datasets.shakespeare.load_data(cache_dir=cache_dir))
 
     shakespeare_train = shakespeare_train.create_tf_dataset_from_all_clients()
     shakespeare_test = shakespeare_test.create_tf_dataset_from_all_clients()

@@ -1,10 +1,13 @@
 ---
-num_rounds: 3000
+num_rounds: 2000
 batch_size: 8
 lr: 0.03
 router_lr: 0.1
 train_proportion: 0.8
 client_data_to_param_ratio: 0.5
+
+dataloader:
+  num_workers: 0
 
 dataset:
   _target_: floral.dataset.synthetic_datasets.synthetic.SyntheticDataset
@@ -37,8 +40,3 @@ model:
     _target_: torch.nn.Identity
     _partial_: True
   dim_out: ${dataset.dim_out}
-
-# hydra:
-#   sweeper:
-#     params:
-#       seed: range(5)

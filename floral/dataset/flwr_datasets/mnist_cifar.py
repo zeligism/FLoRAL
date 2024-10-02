@@ -1,6 +1,15 @@
+from functools import partial
 import torchvision.transforms as T
 from flwr.common.logger import logger
 from .natural_id_cluster_partitioner import NaturalIdClusterPartitioner
+
+
+def identity(y):
+    return y
+
+
+def label_shift(cluster_id, num_classes, y):
+    return (y + cluster_id) % num_classes
 
 
 def _get_data_augmentations(dataset, mode="train"):
@@ -29,51 +38,72 @@ def _get_normalization(dataset):
         return []
 
 
-def define_cluster_transforms_getter(dataset, subtask, num_classes, num_clusters):
-    if subtask == "rotate":
-        def get_transforms(cluster_id, mode="train"):
-            angle_step = 360 // num_clusters
-            transforms = T.Compose([
-                *_get_data_augmentations(dataset, mode),
-                T.ToTensor(),
-                lambda image: T.functional.rotate(image, angle=angle_step * cluster_id),
-                *_get_normalization(dataset),
-            ])
-            return transforms, lambda y: y
+class ClusterTransformGetter:
+    def __init__(self, dataset, subtask, num_classes, num_clusters) -> None:
+        self.dataset = dataset
+        self.subtask = subtask
+        self.num_classes = num_classes
+        self.num_clusters = num_clusters
 
-    elif subtask == "label_shift":
-        def get_transforms(cluster_id, mode="train"):
-            transforms = T.Compose([
-                *_get_data_augmentations(dataset, mode),
-                T.ToTensor(),
-                *_get_normalization(dataset),
-            ])
+    def __call__(self, *args, **kwargs):
+        if self.subtask == "rotate":
+            return self._get_transforms_rotate(*args, **kwargs)
 
-            def label_transforms(y):
-                return (y + cluster_id) % num_classes
+        elif self.subtask == "label_shift":
+            return self._get_transforms_label_shift(*args, **kwargs)
 
-            return transforms, label_transforms
+        else:
+            return self._get_transforms_normal(*args, **kwargs)
 
-    else:
-        def get_transforms(_, mode="train"):
-            transforms = T.Compose([
-                *_get_data_augmentations(dataset, mode),
-                T.ToTensor(),
-                *_get_normalization(dataset),
-            ])
-            return transforms, lambda y: y
-    
-    return get_transforms
+    def _get_transforms_rotate(self, cluster_id, mode="train"):
+        angle = (360 // self.num_clusters) * cluster_id
+        transforms = T.Compose([
+            *_get_data_augmentations(self.dataset, mode),
+            T.ToTensor(),
+            partial(T.functional.rotate, angle=angle),
+            *_get_normalization(self.dataset),
+        ])
+
+        return transforms, identity
+
+    def _get_transforms_label_shift(self, cluster_id, mode="train"):
+        transforms = T.Compose([
+            *_get_data_augmentations(self.dataset, mode),
+            T.ToTensor(),
+            *_get_normalization(self.dataset),
+        ])
+
+        return transforms, partial(label_shift, cluster_id, self.num_classes)
+
+    def _get_transforms_normal(self, cluster_id, mode="train"):
+        transforms = T.Compose([
+            *_get_data_augmentations(self.dataset, mode),
+            T.ToTensor(),
+            *_get_normalization(self.dataset),
+        ])
+
+        return transforms, identity
 
 
-def get_apply_transforms(transforms, label_transforms, image_key, label_key):
-    """Return a function that applies the given transformations to the batch"""
-    def apply_transforms(batch):
-        batch[image_key] = [transforms(image) for image in batch[image_key]]
-        batch[label_key] = [label_transforms(label) for label in batch[label_key]]
+class TransformsApplier:
+    def __init__(self, transforms, label_transforms, image_key, label_key) -> None:
+        self.transforms = transforms
+        self.label_transforms = label_transforms
+        self.image_key = image_key
+        self.label_key = label_key
+
+    def __call__(self, batch):
+        batch[self.image_key] = [self.transforms(image) for image in batch[self.image_key]]
+        batch[self.label_key] = [self.label_transforms(label) for label in batch[self.label_key]]
         return batch
 
-    return apply_transforms
+
+def define_cluster_transforms_getter(*args):
+    return ClusterTransformGetter(*args)
+
+
+def get_apply_transforms(*args):
+    return TransformsApplier(*args)
 
 
 def get_partitioners(dataset, num_clients, num_clusters, image_key, label_key):

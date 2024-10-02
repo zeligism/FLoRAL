@@ -56,7 +56,7 @@ class FlowerClientWithPrivateModules(FlowerClient):
         # use the default private dict above (e.g. in 1st round).
         if os.path.exists(self.private_dict_path):
             logger.debug(f"Client {self.client_id}: loading private_dict from '{self.private_dict_path}'")
-            private_dict = torch.load(self.private_dict_path)
+            private_dict = torch.load(self.private_dict_path, map_location=self.trainer.device)
         # Add or override private dict
         incoming_dict.update(private_dict)
         self.model.load_state_dict(incoming_dict, strict=True)

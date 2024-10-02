@@ -2,6 +2,5 @@
 defaults:
   - _submitit_base
 
-timeout_min: 2880
-cpus_per_task: 48
-mem_gb: 64
+cpus_per_task: 32
+mem_gb: 60

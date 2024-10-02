@@ -1,5 +1,5 @@
 import os
-import glob
+import resource
 import time
 import timeit
 import torch
@@ -11,6 +11,7 @@ from math import isnan
 from hydra.utils import instantiate
 from flwr.common.logger import logger
 from flwr.common.typing import NDArrays
+from flwr.server.history import History
 try:
     import wandb
     WANDB_OK = True
@@ -43,12 +44,6 @@ def now(how="timeit"):
     return timeit.default_timer() if how == "timeit" else time.time()
 
 
-def _clean_pytorch_files(dir):
-    for path in glob.glob(os.path.join(dir, '*.pt')):
-        logger.debug(f"Removing stale private file '{path}'")
-        os.remove(path)
-
-
 def setup_wandb(cfg):
     cfg.wandb = WANDB_OK and cfg.wandb
     if cfg.wandb:
@@ -58,43 +53,70 @@ def setup_wandb(cfg):
         )
 
 
-def init_private_dir(private_dir):
-    # clean private directory from .pt files to avoid conflicting runs
-    os.makedirs(private_dir, exist_ok=True)
-    _clean_pytorch_files(private_dir)
-
-
 def get_ray_init_args(cfg, hydra_cfg):
-    ray_init_args = instantiate(cfg.ray_init_args)
-    # configure ray reseources based on environment
-    if "submitit_launcher" in hydra_cfg.launcher._target_:
-        if hydra_cfg.launcher.cpus_per_task is not None:
-            ray_init_args["num_cpus"] = hydra_cfg.launcher.cpus_per_task
-        if hydra_cfg.launcher.gpus_per_task is not None:
-            ray_init_args["num_gpus"] = hydra_cfg.launcher.gpus_per_task
-    # Override with SLURM env variables if they exist
-    if "SLURM_CPUS_PER_TASK" in os.environ:
-        ray_init_args["num_cpus"] = int(os.environ["SLURM_CPUS_PER_TASK"])
-    if "SLURM_GPUS_PER_TASK" in os.environ:
-        ray_init_args["num_cpus"] = int(os.environ["SLURM_GPUS_PER_TASK"])
-    # TODO:
-    # SLURM_MEM_PER_CPU
-    # SLURM_MEM_PER_GPU
-    # SLURM_MEM_PER_NODE
+    ray_init_args = instantiate(cfg.ray_init_args)  # default
+    if not cfg.keep_ray_initialized:  # only setup resources for a new ray cluster
+        # configure ray resources based on environment
+        if "submitit_launcher" in hydra_cfg.launcher._target_:
+            if hydra_cfg.launcher.cpus_per_task is not None:
+                ray_init_args["num_cpus"] = hydra_cfg.launcher.cpus_per_task
+            if hydra_cfg.launcher.gpus_per_task is not None:
+                ray_init_args["num_gpus"] = hydra_cfg.launcher.gpus_per_task
+
+        # Default is half of the available cpus (your computer will thank me later)
+        if ray_init_args.get("num_cpus") is None and os.cpu_count() is not None:
+            ray_init_args["num_cpus"] = os.cpu_count() // 2
+
+        # Don't violate SLURM env variables
+        if "SLURM_CPUS_PER_TASK" in os.environ:
+            ray_init_args["num_cpus"] = min(int(os.environ["SLURM_CPUS_PER_TASK"]),
+                                            ray_init_args.get("num_cpus", 1e20))
+        if "SLURM_GPUS_PER_TASK" in os.environ:
+            ray_init_args["num_gpus"] = min(int(os.environ["SLURM_GPUS_PER_TASK"]),
+                                            ray_init_args.get("num_gpus", 1e20))
+
+        # Use 30% of _user's_ memory limit (30% = ray's default)
+        _, system_mem_limit = resource.getrlimit(resource.RLIMIT_RSS)
+        if system_mem_limit != -1:
+            ray_init_args["object_store_memory"] = min(system_mem_limit / 3,
+                                                    ray_init_args.get("object_store_memory", 1e20))
+
+        # XXX: Ray might create a ton of threads, is there a way to control that?
+        # if "SLURM_CPUS_PER_TASK" in os.environ:
+        #     _, system_threads_limit = resource.getrlimit(resource.RLIMIT_NPROC)
+        #     system_cpus = os.cpu_count() or 1
+        #     threads_per_cpu = system_threads_limit // system_cpus
+        #     task_threads = threads_per_cpu * ray_init_args["num_cpus"]
+        #     # os.environ["RAY_num_server_call_thread"] = str(system_threads_limit // 4)  # default is 25%
+        #     logger.debug(f"System CPUs = {system_cpus}")
+        #     logger.debug(f"System Threads = {system_threads_limit}")
+        #     logger.debug(f"Task CPUs = {ray_init_args['num_cpus']}")
+        #     logger.debug(f"Task Threads = {task_threads}")
 
     logger.info(f"Ray init args = {ray_init_args}")
     return ray_init_args
 
 
-def optuna_objective(history):
-    if history is not None and len(history.losses_distributed) > 0:
-        _, loss = history.losses_distributed[-1]
+def optuna_objective(history: dict[str, Any]):
+    if history is not None and len(history["losses_distributed"]) > 0:
+        _, loss = history["losses_distributed"][-1]
         if isnan(loss):
             loss = float('inf')
     else:
         loss = float('inf')
 
     return loss
+
+
+# TODO: remove
+def get_flwr_history_as_dict(history: History):
+    return {
+        "losses_distributed": history.losses_distributed,
+        "losses_centralized": history.losses_centralized,
+        "metrics_distributed_fit": history.metrics_distributed_fit,
+        "metrics_distributed": history.metrics_distributed,
+        "metrics_centralized": history.metrics_centralized,
+    }
 
 
 def eval_num(expression: str) -> Any:

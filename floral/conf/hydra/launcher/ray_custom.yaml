@@ -1,0 +1,7 @@
+defaults:
+  - ray
+
+ray:
+  init:
+    ignore_reinit_error: True
+    include_dashboard: False

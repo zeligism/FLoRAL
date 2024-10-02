@@ -15,7 +15,23 @@ class LinearLoRA(LoRA):
         init_lora_(self.layer_in.weight, self.layer_out.weight, main.in_features,
                    rank=rank, init_strategy=init_strategy)
 
+    @staticmethod
+    @torch.no_grad()
+    def merge(weight_in: torch.Tensor, weight_out: torch.Tensor) -> torch.Tensor:
+        return weight_out @ weight_in
 
+    @staticmethod
+    @torch.no_grad()
+    def demerge(merged_weight: nn.Linear, weight_in, weight_out) -> tuple[torch.Tensor, torch.Tensor]:
+        # Minimize this guy: || UcVc.T - UV.T||^2
+        demerged_weight_in = torch.linalg.inv(weight_out.T @ weight_out) @ weight_out.T @ merged_weight
+        demerged_weight_out = merged_weight @ weight_in.T @ torch.linalg.inv(weight_in @ weight_in.T)
+        # TODO: inverse free?
+
+        return demerged_weight_in, demerged_weight_out
+
+
+# XXX: deprecated
 class LoraLinearExperts(nn.Module):
     def __init__(self, main: nn.Linear, rank, num_experts, min_rank=1,
                  bias=False, init_strategy=None, fuse_params=False) -> None:

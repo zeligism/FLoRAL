@@ -1,9 +1,6 @@
 from collections import defaultdict
-from omegaconf import OmegaConf
 from hydra.utils import instantiate
 from flwr.common.typing import Metrics
-from flwr.common import ndarrays_to_parameters
-from floral.utils import get_ndarrays
 
 
 # Define metric aggregation function
@@ -62,16 +59,16 @@ def get_evaluate_fn(cfg):
     return None
 
 
-def get_strategy(cfg, global_model, save_path):
+def get_strategy(cfg, global_model, global_optimizer, save_path):
     strategy_opts = {
-        "initial_parameters": ndarrays_to_parameters(get_ndarrays(global_model)),
+        # FedAvg opts
         "evaluate_fn": get_evaluate_fn(cfg),
         "on_fit_config_fn": get_on_fit_config_fn(cfg),
         "on_evaluate_config_fn": get_on_evaluate_config_fn(cfg),
+        # myfedavg opts
+        "global_model": global_model,
+        "global_optimizer": global_optimizer,
+        "save_path": save_path,
     }
-    if OmegaConf.is_missing(cfg.strategy, "global_model"):
-        strategy_opts["global_model"] = global_model
-    if OmegaConf.is_missing(cfg.strategy, "save_path"):
-        strategy_opts["save_path"] = save_path
 
     return instantiate(cfg.strategy, **strategy_opts)

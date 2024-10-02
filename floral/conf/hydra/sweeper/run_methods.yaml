@@ -4,4 +4,5 @@ defaults:
 
 params:
   method@_global_: choice(floral, floral_10, floral_locallora, fedavg, ensemble, floral_optimalrouter, floral_10_optimalrouter, ensemble_optimalrouter)
-  # seed: choice(1,2)
+  # seed: choice(0)
+  seed: choice(1,2,3,4)

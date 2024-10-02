@@ -9,6 +9,7 @@ class TrainerBase:
     dataloaders: dict[str, Iterable]
     optimizer: torch.optim.Optimizer
     loss_fn: Callable
+    device: torch.device
     # regularizer: Regularizer
     identifier: str
     local_epochs: float
@@ -24,10 +25,10 @@ class TrainerBase:
     def batch_preprocess(self, batch: Any) -> Any:
         ...
 
-    def train(self) -> dict[str, float]:
+    def train(self, config: dict[str, Any]) -> dict[str, float]:
         ...
 
-    def evaluate(self) ->  dict[str, float]:
+    def evaluate(self, config: dict[str, Any]) ->  dict[str, float]:
         ...
 
     def train_step(self, batch: Any) -> dict[str, float]:

@@ -1,15 +1,13 @@
 ---
-num_rounds: 1000  # about 25 min per 100 rounds of floral_rank4 (double fraction below)
+num_rounds: 1500  # about 25 min per 100 rounds of floral_rank4 (double fraction below)
 batch_size: 32
 lr: 0.1
 router_lr: 0.1
 
 floral:
-  rank: 0.99999  # full fine-tuning of last layer
   num_clusters: 10
-
-dataloader:
-  num_workers: 2
+ensemble:
+  num_clusters: 10
 
 dataset:
   dataset: shakespeare
@@ -36,4 +34,3 @@ strategy:
 client_resources:
   num_cpus: 1
   num_gpus: 0
-

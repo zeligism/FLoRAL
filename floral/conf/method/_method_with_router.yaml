@@ -4,6 +4,9 @@ defaults:
   - _self_
 
 router_lr: ${lr}
+router_temp: 1.0
+router_noise_std: 1.0
+router_top2_gating: False
 router_entropy: 0.0
 router_diagonal_init: False
 
@@ -22,9 +25,4 @@ client:
   full_comm: True
 
 strategy:
-  _target_: ???
-  global_model: ???  # filled at runtime
-  save_path: ???  # filled at runtime
-  global_lr: 1.0
-  eps: 1e-10
-  model_filename: model.pt
+  _target_: ???  # e.g., floral or ensemble

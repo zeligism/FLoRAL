@@ -4,9 +4,6 @@ batch_size: 64
 lr: 0.03
 router_lr: 0.1
 
-dataloader:
-  num_workers: 2
-
 dataset:
   dataset: cifar10
   subtask: none  # (rotate, label_shift)
@@ -31,7 +28,3 @@ trainer:
   batch_keys:
     - ${dataset.image_key}
     - ${dataset.label_key}
-
-client_resources:
-  num_cpus: 1
-  num_gpus: 0

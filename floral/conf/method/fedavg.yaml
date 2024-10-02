@@ -1,2 +1,13 @@
 ---
 # The default base config is FedAvg
+#
+# NOTE:
+#   A better approach might be to put client, strategy, and trainer (incl, loss and reg) here,
+#   so that we don't need to do method@_global_.
+#   However, task would need to be on the global level as it overrides many of method's variables.
+#   This can make more sense since methods are swept per task and tasks describe different experiments.
+#
+#   I've pondered this, but decided to just use @_global_ for both.
+#   Putting tasks in the base directory will look messy.
+#   If you need to use @_global_ for one guy, then might as well use it for the other.
+#

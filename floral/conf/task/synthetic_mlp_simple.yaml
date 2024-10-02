@@ -2,6 +2,5 @@
 defaults:
   - synthetic_mlp
 
-num_rounds: 1000
 dataset:
   simple: True

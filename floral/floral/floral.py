@@ -28,9 +28,10 @@ MODULE_NAME_SEP = '/'
 
 
 class Floral(nn.Module):
-    base_model: nn.Module
-    lora_modules: Mapping[str, Union[LoRAList, LoraExperts]]
+    base_model: nn.Module  # TODO: rename to `base`
+    lora_modules: Mapping[str, Union[LoRAList, LoraExperts]]  # TODO: rename to `adaptors`
     router: Router
+    _global_refs: dict[nn.Module, str]  # LoRAs path with respect to base
 
     def __init__(self,
                  base_model: nn.Module,
@@ -69,7 +70,7 @@ class Floral(nn.Module):
         if self.convlora_method == "none":
             self.use_convlora = False
         self.normlora_reparam = normlora_reparam
-        self.fuse_params = fuse_params
+        self.fuse_params = fuse_params  # XXX: remove
         self.router_per_layer = router_per_layer  # XXX: experimental
         self._patch_methods_from_base_model()
         self._init_module_refs()
@@ -99,10 +100,14 @@ class Floral(nn.Module):
         return self._global_refs.get(module)
         # return module._module_ref_from_base
 
+    def modules_and_adaptors(self):
+        for module, ref in self._global_refs.items():
+            yield module, self.lora_modules[ref]
+
     def _init_router(self, router_opts):
         layers = None
         if self.router_per_layer:
-            # XXX: only implemented for linear and conv2d
+            # TODO: only implemented for linear and conv2d, implement for the rest
             layers = [self.get_ref(m) for m in self.base_model.modules() if isinstance(m, (nn.Linear, nn.Conv2d))]
         self.router = Router(num_clusters=self.num_clusters, layers=layers, **router_opts)
 
@@ -134,6 +139,7 @@ class Floral(nn.Module):
                     instantiate_lora(m, self.rank) for _ in range(self.num_clusters)
                 )
         else:
+            # XXX
             lora_experts = self.create_lora_experts(m)
             if lora_experts is not None:
                 self.lora_modules[module_ref] = lora_experts
@@ -187,19 +193,47 @@ class Floral(nn.Module):
 
         return lora_experts
 
-    def fuse_loras(self):
-        if self.fuse_params:
-            for lora_module in self.lora_modules.values():
-                lora_module.fuse()
-
     @torch.no_grad()
-    def defuse_loras(self):
-        if self.fuse_params:
-            for lora_module in self.lora_modules.values():
-                lora_module.defuse(self.router.routes)
+    def center_loras_at_base_(self, cluster_probs: torch.Tensor) -> None:
+        if self.num_clusters == 0:
+            return
+        assert len(cluster_probs) == self.num_clusters
 
-    # Add lora forward hooks for the original modules only
+        for base, lora_list in self.modules_and_adaptors():
+            lora_list: LoRAList
+            # LoRAs have layer_in, layer_out, and possibly a bias, nothing else.
+            # It's difficult to generalize this to arbitrary architectures.
+            mean_weight_in = torch.zeros_like(lora_list[0].layer_in.weight)
+            mean_weight_out = torch.zeros_like(lora_list[0].layer_out.weight)
+            mean_merged_weight = lora_list[0].__class__.merge(mean_weight_in, mean_weight_out)
+            mean_bias = None
+            if lora_list[0].layer_out.bias is not None:
+                mean_bias = torch.zeros_like(lora_list[0].layer_out.bias)
+
+            # Calculate mean lora and merge
+            # Note that we have to _average of the merged loras_,
+            # which is different from _the merged lora of the average_
+            for prob, lora in zip(cluster_probs, lora_list):
+                lora_merged_weight = lora.__class__.merge(lora.layer_in.weight, lora.layer_out.weight)
+                mean_merged_weight.add_(lora_merged_weight.mul(prob))
+                if mean_bias is not None:
+                    mean_bias.add_(lora.layer_out.bias.mul(prob))
+
+            # Subtract mean lora from all loras
+            for lora in lora_list:
+                mean_weight_in, mean_weight_out = lora.__class__.demerge(
+                    mean_merged_weight, lora.layer_in.weight, lora.layer_out.weight)
+                lora.layer_in.weight.sub_(mean_weight_in)
+                lora.layer_out.weight.sub_(mean_weight_out)
+                if mean_bias is not None:
+                    lora.layer_out.bias.sub_(mean_bias)
+            # Merge mean lora and add to base
+            base.weight.add_(mean_merged_weight)
+            if mean_bias is not None:
+                base.bias.add_(mean_bias)
+
     def _lora_forward_hook(self, inner_m, args, output):
+        """Add lora forward hooks for the original modules only"""
         probs = self.router.routes
         if probs is None:
             return output

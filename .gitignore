@@ -1,6 +1,6 @@
 *.pyc
 .DS_Store
-logs/
+logs*/
 data/
 outputs*/
 notebooks/results*/

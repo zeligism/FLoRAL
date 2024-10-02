@@ -3,5 +3,5 @@ defaults:
   - _optuna_base
 
 params:
-  router_entropy: choice(0.0, 0.01)
+  router_entropy: choice(1e-1, 1e-2, 1e-3, 1e-4)
   # weight_decay: choice(0.0, 0.01)

@@ -29,6 +29,11 @@ class PrecondLoRATrainer(Trainer):
         self.inverse_free = inverse_free
         self.matrix_precond = matrix_precond
         self.router_precond = router_precond
+        self.round = None
+
+    def train(self, config: dict[str, Any]) -> dict[str, float]:
+        self.round = config["round"]
+        return super().train(config)
 
     def train_step(self, batch: Any) -> dict[str, float]:
         data, target = self.batch_preprocess(batch)
@@ -44,6 +49,8 @@ class PrecondLoRATrainer(Trainer):
                       inverse_free=self.inverse_free,
                       matrix_precond=self.matrix_precond,
                       router_precond=self.router_precond)
+        if self.clip_grad_norm is not None:
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.clip_grad_norm)
         # TODO(refactor): Can we wrap precond_ in optimizer.step?
         #                 problem is knowledge of model structure is required.
         self.optimizer.step()
@@ -64,6 +71,7 @@ class PrecondLoRATrainer(Trainer):
             if module_ref is None or module_ref not in model.lora_modules:
                 continue
             lora_module = model.lora_modules[module_ref]
+            # TODO: use `for _, lora_list in model.modules_and_loras()`
             if MODULAR_IMPL:
                 lora_list: LoRAList = lora_module
                 if len(lora_list) == 0:
@@ -89,9 +97,9 @@ class PrecondLoRATrainer(Trainer):
                     continue
                 if lora_experts.weight_in.grad is None or lora_experts.weight_out.grad is None:
                     continue
-                if router_precond:
-                    lora_fused = torch.einsum("cma...,can...->cmn...", lora.layer_out.weight, lora.layer_in.weight)
-                    lora_norms = torch.stack([torch.linalg.norm(lora_fused[c]) for c in range(len(lora_fused))]).view(-1)
+                if router_precond:  # XXX
+                    lora_merged = torch.einsum("cma...,can...->cmn...", lora.layer_out.weight, lora.layer_in.weight)
+                    lora_norms = torch.stack([torch.linalg.norm(lora_merged[c]) for c in range(len(lora_merged))]).view(-1)
                 precond_lora_experts_(lora_experts, eps=eps, inverse_free=inverse_free)
 
         # TODO(experimental): preconditioning the router.

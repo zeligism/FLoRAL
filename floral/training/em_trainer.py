@@ -50,9 +50,9 @@ class EMTrainer(Trainer):
     def eval_step(self, batch: Any) -> dict[str, float]:
         return self.ensemble_step('eval', batch)
 
-    def train(self) -> dict[str, AverageMeter]:
+    def train(self, config: dict[str, Any]) -> dict[str, AverageMeter]:
         self.router_em_()
-        metrics_meter = super().train()
+        metrics_meter = super().train(config)
         return metrics_meter
 
     @torch.no_grad()
