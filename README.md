@@ -43,6 +43,62 @@ but we recommend overriding it using the test script `scripts/test.py`.
 Note that the two arguments `method@_global_` and `task@_global_` have the `@_global_` suffix
 because they are "packages" arguments that import many other prespecified arguments to the global level.
 
+## Using and tuning FLoRAL
+FLoRAL learns a shared base model and multiple shared sets of adaptors (the clusters).
+Each client learns a private router that mixes these adaptors for personalization.
+After activating the environment, run a short example from the repository root:
+```bash
+python -m floral.main \
+  task@_global_=synthetic_linear method@_global_=floral \
+  floral.num_clusters=2 router_temp=1.0 \
+  num_rounds=100 experiment=floral_tuning identifier=k2_t1
+```
+Choose other tasks from `floral/conf/task/` and increase `num_rounds` for longer training.
+The main FLoRAL options are in `floral/conf/method/floral.yaml`;
+shared router options are in `floral/conf/method/_method_with_router.yaml`.
+
+### Number of clusters
+Set `floral.num_clusters` to choose the number of adaptor sets, not the number of clients.
+In the base FLoRAL preset, it defaults to `dataset.num_clusters` when available, otherwise `4`;
+task and method presets can override it.
+The effective count is `round(floral.num_clusters * floral.num_clusters_mult)`,
+where the multiplier defaults to `1.0`.
+Keep the multiplier at `1.0` when comparing explicit cluster counts.
+Override `floral.num_clusters`, rather than `dataset.num_clusters`, to tune model capacity
+without changing the data generation or partitioning.
+
+Use a positive count for an adaptor mixture.
+One cluster gives a shared-adaptor baseline with no routing choice.
+More clusters allow greater specialization but increase adaptor parameters, communication, and computation.
+Start with a small count, such as `2` or `4`, and compare against `1` before increasing it.
+
+### Router temperature
+Set the top-level `router_temp` option (default `1.0`), which populates `floral.router_opts.temp`.
+The router computes softmax probabilities from its logits divided by this temperature.
+For fixed logits:
+
+| Temperature | Effect |
+| --- | --- |
+| `0.2` | Sharper probabilities, favoring fewer adaptors. |
+| `1.0` | Default starting point. |
+| `5.0` | Smoother probabilities, mixing adaptors more evenly. |
+
+Keep the temperature strictly positive.
+Lowering it sharpens the probabilities but does not itself enable hard routing.
+The same temperature is used during training and evaluation.
+During training only, `router_noise_std` (default `1.0`) controls additive noise applied before temperature scaling.
+The router learning rate is controlled separately by `router_lr`, which defaults to `lr`
+unless overridden by a task preset.
+Keep these controls fixed initially; if routing is unstable, try reducing the noise or router learning rate.
+
+### Comparing settings
+Try cluster counts such as `1`, `2`, and `4` with temperatures such as `0.2`, `1.0`, and `5.0`.
+Give each single run a distinct `identifier` (for example, `identifier=k4_t02`) to keep its outputs separate.
+Compare held-out validation performance using the same task, training budget, and seeds:
+more clusters or a lower temperature are not automatically better.
+Append `--cfg job --resolve` to a command to inspect its resolved configuration without training.
+See [Visualizing the results](#visualizing-the-results) for tools to inspect experiment results.
+
 ## Running the experiments
 I prepared a nice script for running experiments on SLURM automatically, if there is any.
 Otherwise, it will run sequentially on your local machine.
